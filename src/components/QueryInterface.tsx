@@ -44,6 +44,8 @@ export default function QueryInterface({ onQueryComplete }: QueryInterfaceProps)
   const [latencyMs, setLatencyMs] = useState(0);
   const [expandedResult, setExpandedResult] = useState<number | null>(null);
   const [activeTool, setActiveTool] = useState<{ index: number; tool: "translate" | "walkthrough" } | null>(null);
+  const [fusionEnabled, setFusionEnabled] = useState(false);
+  const [fusionInfo, setFusionInfo] = useState<{ queryVariants?: string[]; perQueryResults?: number[] } | null>(null);
   const answerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -59,16 +61,17 @@ export default function QueryInterface({ onQueryComplete }: QueryInterfaceProps)
     setError("");
     setAnswer("");
     setResults([]);
+    setFusionInfo(null);
     setIsSearching(true);
     setIsAnswering(false);
     setExpandedResult(null);
 
     try {
-      // Step 1: Search
+      // Step 1: Search (standard or fusion)
       const searchRes = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q, topK: 5 }),
+        body: JSON.stringify({ query: q, topK: 5, fusion: fusionEnabled }),
       });
 
       if (!searchRes.ok) {
@@ -79,6 +82,12 @@ export default function QueryInterface({ onQueryComplete }: QueryInterfaceProps)
       const searchData = await searchRes.json();
       setResults(searchData.results);
       setLatencyMs(searchData.latencyMs);
+      if (searchData.fusion?.enabled) {
+        setFusionInfo({
+          queryVariants: searchData.fusion.queryVariants,
+          perQueryResults: searchData.fusion.perQueryResults,
+        });
+      }
       setIsSearching(false);
       onQueryComplete?.(searchData.results, q, searchData.latencyMs);
 
@@ -87,7 +96,7 @@ export default function QueryInterface({ onQueryComplete }: QueryInterfaceProps)
       const answerRes = await fetch("/api/answer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q, topK: 5 }),
+        body: JSON.stringify({ query: q, topK: 5, fusion: fusionEnabled }),
       });
 
       if (!answerRes.ok) {
@@ -166,13 +175,30 @@ export default function QueryInterface({ onQueryComplete }: QueryInterfaceProps)
               </div>
             )}
           </div>
-          <button
-            onClick={() => handleSearch()}
-            disabled={isSearching || isAnswering || !query.trim()}
-            className="px-6 py-4 bg-[#00d4aa] text-[#0a0e17] font-semibold rounded-xl hover:bg-[#00e8bb] transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
-          >
-            {isSearching ? "Searching..." : isAnswering ? "Thinking..." : "Search"}
-          </button>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => handleSearch()}
+              disabled={isSearching || isAnswering || !query.trim()}
+              className="px-6 py-4 bg-[#00d4aa] text-[#0a0e17] font-semibold rounded-xl hover:bg-[#00e8bb] transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
+            >
+              {isSearching ? "Searching..." : isAnswering ? "Thinking..." : "Search"}
+            </button>
+            {/* Fusion Toggle */}
+            <button
+              onClick={() => setFusionEnabled(!fusionEnabled)}
+              className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-medium border transition-all ${
+                fusionEnabled
+                  ? "bg-[#00d4aa]/15 text-[#00d4aa] border-[#00d4aa]/30"
+                  : "text-[#4a5568] border-[#1a2744] hover:text-[#64748b] hover:border-[#2a3a55]"
+              }`}
+              title="RAG Fusion generates multiple query reformulations and merges results for better recall"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Fusion {fusionEnabled ? "ON" : "OFF"}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -223,11 +249,51 @@ export default function QueryInterface({ onQueryComplete }: QueryInterfaceProps)
               {new Set(results.map((r) => r.filePath)).size}
             </span>
           </div>
+          {fusionInfo && (
+            <div className="flex items-center gap-1.5 text-xs bg-[#00d4aa]/10 border border-[#00d4aa]/20 rounded-lg px-3 py-1.5">
+              <svg className="w-3 h-3 text-[#00d4aa]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <span className="text-[#00d4aa]">Fusion</span>
+              <span className="text-[#00d4aa] font-mono">{fusionInfo.queryVariants?.length || 0} queries</span>
+            </div>
+          )}
           <div className="flex items-center gap-1.5 text-xs bg-[#0d1520] border border-[#1a2744] rounded-lg px-3 py-1.5">
             <span className="text-[#4a5568]">Divisions</span>
             <span className="text-[#e2e8f0] font-mono">
               {[...new Set(results.map((r) => r.division).filter(Boolean))].join(", ") || "—"}
             </span>
+          </div>
+        </div>
+      )}
+
+      {/* Fusion Query Variants */}
+      {fusionInfo?.queryVariants && fusionInfo.queryVariants.length > 1 && (
+        <div className="mb-6 px-1">
+          <div className="rounded-lg bg-[#0d1520] border border-[#00d4aa]/15 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-[#00d4aa]/70 mb-2 flex items-center gap-1.5">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              RAG Fusion — Query Reformulations
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {fusionInfo.queryVariants.map((variant, idx) => (
+                <div
+                  key={idx}
+                  className={`text-xs px-2.5 py-1.5 rounded-md border ${
+                    idx === 0
+                      ? "bg-[#00d4aa]/10 border-[#00d4aa]/20 text-[#00d4aa]"
+                      : "bg-[#0a0e17] border-[#1a2744] text-[#94a3b8]"
+                  }`}
+                >
+                  <span className="text-[#4a5568] mr-1.5 font-mono text-[10px]">
+                    {idx === 0 ? "original" : `v${idx}`}
+                  </span>
+                  {variant}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

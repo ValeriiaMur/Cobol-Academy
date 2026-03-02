@@ -7,13 +7,14 @@
 
 import { NextRequest } from "next/server";
 import { searchCodebase, generateStreamingAnswer } from "@/lib/rag-pipeline";
+import { fusionSearch } from "@/lib/rag-fusion";
 import { logQuery, logError } from "@/lib/query-logger";
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
-    const { query, topK = 5 } = await request.json();
+    const { query, topK = 5, fusion = false } = await request.json();
 
     if (!query || typeof query !== "string") {
       return new Response(JSON.stringify({ error: "Query string is required" }), {
@@ -22,9 +23,15 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Step 1: Retrieve relevant chunks
+    // Step 1: Retrieve relevant chunks (standard or fusion)
     const searchStart = Date.now();
-    const results = await searchCodebase(query, topK);
+    let results;
+    if (fusion) {
+      const fusionResult = await fusionSearch(query, topK);
+      results = fusionResult.results;
+    } else {
+      results = await searchCodebase(query, topK);
+    }
     const searchLatencyMs = Date.now() - searchStart;
 
     if (results.length === 0) {

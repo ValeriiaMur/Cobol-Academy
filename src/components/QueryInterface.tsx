@@ -3,6 +3,9 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import CodeTranslator from "./CodeTranslator";
+import CodeWalkthrough from "./CodeWalkthrough";
+import DependencyGraph from "./DependencyGraph";
 
 interface SearchResult {
   id: string;
@@ -40,6 +43,7 @@ export default function QueryInterface({ onQueryComplete }: QueryInterfaceProps)
   const [error, setError] = useState("");
   const [latencyMs, setLatencyMs] = useState(0);
   const [expandedResult, setExpandedResult] = useState<number | null>(null);
+  const [activeTool, setActiveTool] = useState<{ index: number; tool: "translate" | "walkthrough" } | null>(null);
   const answerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -230,6 +234,7 @@ export default function QueryInterface({ onQueryComplete }: QueryInterfaceProps)
 
       {/* Results Layout */}
       {(results.length > 0 || answer) && (
+        <>
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* AI Answer - Main Column */}
           <div className="lg:col-span-3 order-1">
@@ -372,6 +377,80 @@ export default function QueryInterface({ onQueryComplete }: QueryInterfaceProps)
                             </div>
                           ))}
                       </pre>
+
+                      {/* Learning Tool Buttons */}
+                      <div className="px-4 py-2 border-t border-[#1a2744] flex items-center gap-2">
+                        <span className="text-[10px] uppercase tracking-wider text-[#4a5568] mr-1">Learn:</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveTool(
+                              activeTool?.index === i && activeTool?.tool === "translate"
+                                ? null
+                                : { index: i, tool: "translate" }
+                            );
+                          }}
+                          className={`px-2 py-1 text-[10px] rounded-md border transition-all flex items-center gap-1 ${
+                            activeTool?.index === i && activeTool?.tool === "translate"
+                              ? "bg-[#00d4aa]/20 text-[#00d4aa] border-[#00d4aa]/40"
+                              : "text-[#64748b] border-[#1a2744] hover:text-[#94a3b8] hover:border-[#2a3a55]"
+                          }`}
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                          </svg>
+                          Translate
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveTool(
+                              activeTool?.index === i && activeTool?.tool === "walkthrough"
+                                ? null
+                                : { index: i, tool: "walkthrough" }
+                            );
+                          }}
+                          className={`px-2 py-1 text-[10px] rounded-md border transition-all flex items-center gap-1 ${
+                            activeTool?.index === i && activeTool?.tool === "walkthrough"
+                              ? "bg-[#00d4aa]/20 text-[#00d4aa] border-[#00d4aa]/40"
+                              : "text-[#64748b] border-[#1a2744] hover:text-[#94a3b8] hover:border-[#2a3a55]"
+                          }`}
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                          </svg>
+                          Walkthrough
+                        </button>
+                      </div>
+
+                      {/* Translator Panel */}
+                      {activeTool?.index === i && activeTool?.tool === "translate" && (
+                        <div className="px-4 pb-3" onClick={(e) => e.stopPropagation()}>
+                          <CodeTranslator
+                            cobolCode={result.content}
+                            filePath={result.filePath}
+                            lineStart={result.lineStart}
+                            lineEnd={result.lineEnd}
+                            paragraphName={result.paragraphName}
+                            division={result.division}
+                          />
+                        </div>
+                      )}
+
+                      {/* Walkthrough Panel */}
+                      {activeTool?.index === i && activeTool?.tool === "walkthrough" && (
+                        <div className="px-4 pb-3" onClick={(e) => e.stopPropagation()}>
+                          <CodeWalkthrough
+                            cobolCode={result.content}
+                            filePath={result.filePath}
+                            lineStart={result.lineStart}
+                            lineEnd={result.lineEnd}
+                            paragraphName={result.paragraphName}
+                            division={result.division}
+                          />
+                        </div>
+                      )}
+
                       {result.dependencies.length > 0 && (
                         <div className="px-4 py-2 border-t border-[#1a2744]">
                           <div className="text-[10px] uppercase tracking-wider text-[#4a5568] mb-1">Dependencies</div>
@@ -399,6 +478,12 @@ export default function QueryInterface({ onQueryComplete }: QueryInterfaceProps)
             </div>
           </div>
         </div>
+
+        {/* Dependency Graph */}
+        {results.some((r) => r.dependencies.length > 0) && (
+          <DependencyGraph results={results} />
+        )}
+        </>
       )}
     </div>
   );

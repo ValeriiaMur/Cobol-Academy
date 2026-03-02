@@ -19,12 +19,12 @@ interface SearchResult {
 }
 
 const SUGGESTED_QUERIES = [
-  "Where is the main entry point?",
-  "What functions modify CUSTOMER-RECORD?",
-  "Explain the CALCULATE-INTEREST paragraph",
-  "Find all file I/O operations",
-  "Show me error handling patterns",
-  "What are the dependencies of the parser?",
+  "What does the CBL_OC_DUMP program do?",
+  "How does the tutorial open indexed files?",
+  "Explain the SQLCA copybook structure",
+  "What screen I/O constants are defined?",
+  "Show me PERFORM and CALL patterns",
+  "What COPY dependencies exist in the codebase?",
 ];
 
 interface QueryInterfaceProps {

@@ -10,12 +10,12 @@ const STATS = [
 ];
 
 const SAMPLE_QUERIES = [
-  "Where is the main entry point of the compiler?",
-  "What functions handle file I/O operations?",
-  "Explain the PROCEDURE DIVISION structure",
-  "Show me error handling patterns",
-  "What are the dependencies of the parser module?",
-  "Find all PERFORM statements in the codebase",
+  "What does the CBL_OC_DUMP hex dump utility do?",
+  "How does the tutorial program write indexed files?",
+  "Explain the SQLCA copybook structure",
+  "What screen I/O constants are defined?",
+  "Show me PERFORM and CALL patterns in the tutorial",
+  "What COPY dependencies exist across the codebase?",
 ];
 
 export default function Hero({ onStartLearning }: { onStartLearning: () => void }) {

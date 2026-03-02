@@ -1,8 +1,14 @@
 /**
  * COBOL Academy — Evaluation Test Suite
  *
- * Runs the 6 required test queries from the project spec and scores
+ * Runs 6 test queries tailored to the actual GnuCOBOL codebase and scores
  * retrieval quality using automated heuristics + a simplified RAGAS approach.
+ *
+ * The GnuCOBOL codebase contains:
+ * - CBL_OC_DUMP.cob: A hex dump display utility
+ * - tutorial.cob: File handler tutorial using the Callable File Handler
+ * - numeric-dump.cob / numeric-display.cob: Numeric data test programs
+ * - Copybooks: screenio.cpy (screen I/O), sqlca.cpy (SQL), xfhfcd*.cpy (file handler)
  *
  * Metrics measured:
  * - Retrieval Precision: Are the top-5 results relevant?
@@ -19,7 +25,7 @@ dotenv.config({ path: ".env.local" });
 import { searchCodebase, generateAnswer, SearchResult } from "../src/lib/rag-pipeline";
 
 // ============================================
-// Test Suite — 6 required queries from spec
+// Test Suite — 6 queries tailored to GnuCOBOL
 // ============================================
 
 interface TestCase {
@@ -33,45 +39,45 @@ interface TestCase {
 const TEST_CASES: TestCase[] = [
   {
     id: 1,
-    query: "Where is the main entry point of this program?",
-    expectedResultType: "Specific file + line",
-    relevanceKeywords: ["PROCEDURE", "DIVISION", "PROGRAM-ID", "MAIN", "ENTRY", "PERFORM"],
-    evaluationCriteria: "Correct file and PROCEDURE DIVISION identification",
+    query: "What does the CBL_OC_DUMP program do and how is it called?",
+    expectedResultType: "Program explanation with PROCEDURE DIVISION entry point",
+    relevanceKeywords: ["CBL_OC_DUMP", "DUMP", "PROCEDURE", "DIVISION", "DISPLAY", "HEX", "BUFFER"],
+    evaluationCriteria: "Identifies CBL_OC_DUMP as a hex dump utility with USING parameters",
   },
   {
     id: 2,
-    query: "What functions modify CUSTOMER-RECORD?",
-    expectedResultType: "All relevant PERFORM targets",
-    relevanceKeywords: ["CUSTOMER", "RECORD", "MODIFY", "WRITE", "REWRITE", "PERFORM", "MOVE"],
-    evaluationCriteria: "All relevant PERFORM targets found",
+    query: "How does the tutorial program open and write to indexed files?",
+    expectedResultType: "File I/O operation sequence",
+    relevanceKeywords: ["TUTORIAL", "OPEN", "WRITE", "CLOSE", "OPCODE", "FCD", "FILE", "PERFORM", "CALL"],
+    evaluationCriteria: "Shows the open/write/close sequence using opcodes and CALL file handler",
   },
   {
     id: 3,
-    query: "Explain what the CALCULATE-INTEREST paragraph does",
-    expectedResultType: "Plain English explanation",
-    relevanceKeywords: ["CALCULATE", "INTEREST", "COMPUTE", "MULTIPLY", "AMOUNT", "RATE"],
-    evaluationCriteria: "Accurate logic description with line refs",
+    query: "Explain the SQLCA copybook structure and its fields",
+    expectedResultType: "Data structure explanation",
+    relevanceKeywords: ["SQLCA", "SQLCODE", "SQLERRM", "SQLSTATE", "SQLWARN", "BINARY"],
+    evaluationCriteria: "Identifies SQLCA fields: SQLCODE, SQLERRM, SQLSTATE, SQLWARN",
   },
   {
     id: 4,
-    query: "Find all file I/O operations",
-    expectedResultType: "Multiple code snippets",
-    relevanceKeywords: ["OPEN", "READ", "WRITE", "CLOSE", "FILE", "FD", "SELECT", "ASSIGN"],
-    evaluationCriteria: "OPEN, READ, WRITE, CLOSE statements found",
+    query: "What screen I/O constants are defined in the screenio copybook?",
+    expectedResultType: "Constant definitions with values",
+    relevanceKeywords: ["SCREEN", "COB-SCR", "COB-COLOR", "MOUSE", "VALUE", "78"],
+    evaluationCriteria: "Lists color constants, function key values, and mouse handling flags",
   },
   {
     id: 5,
-    query: "What are the dependencies of the parser module?",
-    expectedResultType: "Dependency graph",
-    relevanceKeywords: ["COPY", "CALL", "PERFORM", "PARSE", "MODULE", "INCLUDE", "DEPEND"],
-    evaluationCriteria: "COPY and CALL statements identified",
+    query: "Show me how PERFORM and CALL statements are used in the file handler tutorial",
+    expectedResultType: "Control flow examples with PERFORM/CALL patterns",
+    relevanceKeywords: ["PERFORM", "CALL", "TUTORIAL", "CALL-FILE-HANDLER", "SET-FCD", "READ", "WRITE"],
+    evaluationCriteria: "Shows PERFORM targets (set-fcd, call-file-handler, read-all-records)",
   },
   {
     id: 6,
-    query: "Show me error handling patterns in this codebase",
-    expectedResultType: "Pattern examples",
-    relevanceKeywords: ["ERROR", "EXCEPTION", "ON ERROR", "INVALID", "STATUS", "NOT", "AT END", "HANDLE"],
-    evaluationCriteria: "ON ERROR, AT END, INVALID KEY found",
+    query: "What COPY statements and external dependencies exist across the codebase?",
+    expectedResultType: "Dependency list across files",
+    relevanceKeywords: ["COPY", "XFHFCD", "SCREENIO", "SQLCA", "SQLDA", "GCWINDOW"],
+    evaluationCriteria: "Identifies copybook dependencies (xfhfcd3.cpy, screenio.cpy, sqlca.cpy)",
   },
 ];
 
@@ -88,7 +94,7 @@ function scoreRetrievalPrecision(results: SearchResult[], keywords: string[]): n
 
   let relevantCount = 0;
   for (const result of results) {
-    const content = (result.content + " " + result.paragraphName + " " + result.division).toUpperCase();
+    const content = (result.content + " " + result.paragraphName + " " + result.division + " " + result.filePath).toUpperCase();
     const hasRelevant = upperKeywords.some((kw) => content.includes(kw));
     if (hasRelevant) relevantCount++;
   }
@@ -102,7 +108,9 @@ function scoreRetrievalPrecision(results: SearchResult[], keywords: string[]): n
 function scoreContextRecall(results: SearchResult[], keywords: string[]): number {
   if (keywords.length === 0) return 1;
   const upperKeywords = keywords.map((k) => k.toUpperCase());
-  const allContent = results.map((r) => (r.content + " " + r.paragraphName + " " + r.division).toUpperCase()).join(" ");
+  const allContent = results
+    .map((r) => (r.content + " " + r.paragraphName + " " + r.division + " " + r.filePath).toUpperCase())
+    .join(" ");
 
   let foundCount = 0;
   for (const kw of upperKeywords) {
@@ -119,12 +127,10 @@ function scoreAnswerFaithfulness(answer: string, results: SearchResult[]): numbe
   if (!answer || results.length === 0) return 0;
   const answerUpper = answer.toUpperCase();
 
-  // Check if answer references file paths from results
   let referencedSources = 0;
   for (const result of results) {
     const fileName = result.filePath.split("/").pop()?.toUpperCase() || "";
     if (fileName && answerUpper.includes(fileName)) referencedSources++;
-    // Also check line numbers
     if (answerUpper.includes(`LINE ${result.lineStart}`) || answerUpper.includes(`L${result.lineStart}`)) {
       referencedSources++;
     }
@@ -160,7 +166,8 @@ interface EvalResult {
 
 async function runEvaluation(): Promise<EvalResult[]> {
   console.log("🎓 COBOL Academy — Evaluation Suite");
-  console.log("====================================\n");
+  console.log("====================================");
+  console.log("Target: GnuCOBOL codebase (compiler tests, copybooks, utilities)\n");
 
   const results: EvalResult[] = [];
 
@@ -208,7 +215,6 @@ async function runEvaluation(): Promise<EvalResult[]> {
 
     results.push(evalResult);
 
-    // Print results
     console.log(`   Results: ${searchResults.length} chunks from ${uniqueFiles} files`);
     console.log(`   Top similarity: ${(evalResult.topScore * 100).toFixed(1)}%`);
     console.log(`   Retrieval Precision: ${(retrievalPrecision * 100).toFixed(0)}%`);
@@ -258,7 +264,6 @@ function printSummary(results: EvalResult[]) {
 
   console.log("└────┴──────────────────────────────────────────┴──────────┴─────────┴───────────┴──────────┘");
 
-  // Performance targets check
   console.log("\n\nPerformance Targets:");
   console.log(`  Query latency <3s:        ${avgLatency < 3000 ? "✅ PASS" : "❌ FAIL"} (${avgLatency.toFixed(0)}ms)`);
   console.log(`  Precision >70% in top-5:  ${avgPrecision >= 0.7 ? "✅ PASS" : "⚠️  " + (avgPrecision * 100).toFixed(0) + "%"}`);

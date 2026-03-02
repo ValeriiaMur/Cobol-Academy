@@ -4,8 +4,6 @@
 
 COBOL Academy is an AI-powered learning platform that helps developers understand COBOL through guided exploration of the GnuCOBOL compiler source code. Built with RAG (Retrieval-Augmented Generation), it lets you ask questions in plain English and get answers grounded in real code — with file paths, line numbers, and modern language equivalents.
 
-**Live App:** [your-deployment-url.vercel.app](https://your-deployment-url.vercel.app)
-
 > COBOL powers 95% of ATM transactions, 80% of in-person transactions, and $3 trillion in daily commerce. The engineers who built these systems are retiring. The code isn't.
 
 ---

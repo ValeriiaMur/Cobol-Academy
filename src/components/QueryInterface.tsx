@@ -25,7 +25,11 @@ const SUGGESTED_QUERIES = [
   "What are the dependencies of the parser?",
 ];
 
-export default function QueryInterface() {
+interface QueryInterfaceProps {
+  onQueryComplete?: (results: SearchResult[], query: string, latencyMs: number) => void;
+}
+
+export default function QueryInterface({ onQueryComplete }: QueryInterfaceProps) {
   const [query, setQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [isAnswering, setIsAnswering] = useState(false);
@@ -70,6 +74,7 @@ export default function QueryInterface() {
       setResults(searchData.results);
       setLatencyMs(searchData.latencyMs);
       setIsSearching(false);
+      onQueryComplete?.(searchData.results, q, searchData.latencyMs);
 
       // Step 2: Get AI answer via streaming
       setIsAnswering(true);
@@ -190,6 +195,37 @@ export default function QueryInterface() {
         </div>
       )}
 
+      {/* Retrieval Summary Bar */}
+      {results.length > 0 && (
+        <div className="mb-6 flex flex-wrap items-center gap-3 px-1">
+          <div className="flex items-center gap-1.5 text-xs bg-[#0d1520] border border-[#1a2744] rounded-lg px-3 py-1.5">
+            <span className="text-[#4a5568]">Retrieved</span>
+            <span className="text-[#00d4aa] font-mono font-medium">{results.length}</span>
+            <span className="text-[#4a5568]">chunks</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs bg-[#0d1520] border border-[#1a2744] rounded-lg px-3 py-1.5">
+            <span className="text-[#4a5568]">Latency</span>
+            <span className="text-[#e2e8f0] font-mono">{latencyMs}ms</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs bg-[#0d1520] border border-[#1a2744] rounded-lg px-3 py-1.5">
+            <span className="text-[#4a5568]">Top score</span>
+            <span className="text-[#00d4aa] font-mono">{(results[0]?.score * 100).toFixed(1)}%</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs bg-[#0d1520] border border-[#1a2744] rounded-lg px-3 py-1.5">
+            <span className="text-[#4a5568]">Files hit</span>
+            <span className="text-[#e2e8f0] font-mono">
+              {new Set(results.map((r) => r.filePath)).size}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs bg-[#0d1520] border border-[#1a2744] rounded-lg px-3 py-1.5">
+            <span className="text-[#4a5568]">Divisions</span>
+            <span className="text-[#e2e8f0] font-mono">
+              {[...new Set(results.map((r) => r.division).filter(Boolean))].join(", ") || "—"}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Results Layout */}
       {(results.length > 0 || answer) && (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -205,6 +241,11 @@ export default function QueryInterface() {
                   {isAnswering && (
                     <span className="text-xs text-[#4a5568] ml-auto">
                       generating...
+                    </span>
+                  )}
+                  {!isAnswering && answer && (
+                    <span className="text-xs text-[#4a5568] ml-auto font-mono">
+                      GPT-4o-mini · {results.length} sources
                     </span>
                   )}
                 </div>
@@ -227,9 +268,6 @@ export default function QueryInterface() {
               <h3 className="text-sm font-medium text-[#94a3b8]">
                 Source Code ({results.length} matches)
               </h3>
-              {latencyMs > 0 && (
-                <span className="text-xs text-[#4a5568]">{latencyMs}ms</span>
-              )}
             </div>
 
             <div className="space-y-3">
@@ -247,27 +285,40 @@ export default function QueryInterface() {
                       <span className="text-xs font-mono text-[#00d4aa] truncate max-w-[200px]">
                         {result.filePath}
                       </span>
-                      <span className="text-xs text-[#4a5568] ml-2 shrink-0">
-                        {(result.score * 100).toFixed(0)}% match
-                      </span>
+                      {/* Score bar */}
+                      <div className="flex items-center gap-2 ml-2 shrink-0">
+                        <div className="w-12 h-1.5 bg-[#1a2744] rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${result.score * 100}%`,
+                              background: result.score > 0.8 ? "#00d4aa" : result.score > 0.6 ? "#ffd93d" : "#64748b",
+                            }}
+                          />
+                        </div>
+                        <span className="text-[10px] text-[#4a5568] font-mono w-8 text-right">
+                          {(result.score * 100).toFixed(0)}%
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-[#64748b]">
-                      <span>
-                        L{result.lineStart}-{result.lineEnd}
+                    <div className="flex items-center gap-2 text-xs text-[#64748b] flex-wrap">
+                      <span className="font-mono bg-[#0a0e17] px-1.5 py-0.5 rounded text-[10px]">
+                        L{result.lineStart}–{result.lineEnd}
                       </span>
                       {result.paragraphName && (
-                        <>
-                          <span className="text-[#1a2744]">|</span>
-                          <span className="text-[#00d4aa]/70">
-                            {result.paragraphName}
-                          </span>
-                        </>
+                        <span className="text-[#00d4aa]/70 bg-[#00d4aa]/5 px-1.5 py-0.5 rounded text-[10px]">
+                          {result.paragraphName}
+                        </span>
                       )}
                       {result.division && (
-                        <>
-                          <span className="text-[#1a2744]">|</span>
-                          <span>{result.division}</span>
-                        </>
+                        <span className="bg-[#0a0e17] px-1.5 py-0.5 rounded text-[10px]">
+                          {result.division}
+                        </span>
+                      )}
+                      {result.chunkType && (
+                        <span className="bg-[#0a0e17] px-1.5 py-0.5 rounded text-[10px] text-[#4a5568]">
+                          {result.chunkType}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -279,7 +330,7 @@ export default function QueryInterface() {
                         {result.content
                           .split("\n")
                           .map((line, lineIdx) => (
-                            <div key={lineIdx} className="flex">
+                            <div key={lineIdx} className="flex hover:bg-[#111b2e]">
                               <span className="text-[#4a5568] select-none w-10 shrink-0 text-right pr-3">
                                 {result.lineStart + lineIdx}
                               </span>
@@ -288,8 +339,23 @@ export default function QueryInterface() {
                           ))}
                       </pre>
                       {result.dependencies.length > 0 && (
-                        <div className="px-4 py-2 border-t border-[#1a2744] text-xs text-[#4a5568]">
-                          Dependencies: {result.dependencies.join(", ")}
+                        <div className="px-4 py-2 border-t border-[#1a2744]">
+                          <div className="text-[10px] uppercase tracking-wider text-[#4a5568] mb-1">Dependencies</div>
+                          <div className="flex flex-wrap gap-1">
+                            {result.dependencies.map((dep) => (
+                              <span
+                                key={dep}
+                                className="text-[10px] font-mono bg-[#0a0e17] text-[#94a3b8] px-1.5 py-0.5 rounded border border-[#1a2744]"
+                              >
+                                {dep}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {result.section && (
+                        <div className="px-4 py-2 border-t border-[#1a2744] text-[10px] text-[#4a5568]">
+                          Section: <span className="text-[#94a3b8] font-mono">{result.section}</span>
                         </div>
                       )}
                     </div>

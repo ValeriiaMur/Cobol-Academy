@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ["langchain", "@langchain/openai", "@langchain/pinecone"],
-  },
+  serverExternalPackages: ["langchain", "@langchain/openai"],
 };
 
 export default nextConfig;

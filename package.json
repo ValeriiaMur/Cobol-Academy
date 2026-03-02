@@ -1,0 +1,45 @@
+{
+  "name": "cobol-academy",
+  "version": "1.0.0",
+  "description": "AI-powered COBOL learning platform — understand the language that quietly runs the world",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "ingest": "npx tsx scripts/ingest.ts",
+    "ingest:dotenv": "npx dotenv -e .env.local -- npx tsx scripts/ingest.ts"
+  },
+  "keywords": [
+    "cobol",
+    "rag",
+    "ai",
+    "learning",
+    "legacy-code",
+    "gnucobol"
+  ],
+  "author": "COBOL Academy",
+  "license": "MIT",
+  "dependencies": {
+    "@langchain/core": "^1.1.29",
+    "@langchain/openai": "^1.2.11",
+    "@langchain/pinecone": "^1.0.1",
+    "@pinecone-database/pinecone": "^7.1.0",
+    "@types/node": "^25.3.3",
+    "@types/react": "^19.2.14",
+    "autoprefixer": "^10.4.27",
+    "langchain": "^1.2.28",
+    "lucide-react": "^0.576.0",
+    "next": "^14.2.35",
+    "openai": "^6.25.0",
+    "postcss": "^8.5.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "dotenv": "^16.6.1",
+    "tsx": "^4.21.0"
+  }
+}

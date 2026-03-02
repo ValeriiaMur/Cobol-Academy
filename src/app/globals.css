@@ -1,0 +1,141 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --cobol-dark: #0a0e17;
+  --cobol-navy: #0f1729;
+  --cobol-accent: #00d4aa;
+  --cobol-glow: #00ffcc;
+  --cobol-muted: #1a2744;
+  --cobol-surface: #111b2e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--cobol-dark);
+  color: #e2e8f0;
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--cobol-navy);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--cobol-muted);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--cobol-accent);
+}
+
+/* Glowing accent text */
+.text-glow {
+  text-shadow: 0 0 20px rgba(0, 212, 170, 0.5), 0 0 40px rgba(0, 212, 170, 0.2);
+}
+
+/* Matrix-style background lines */
+.matrix-bg {
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 35px,
+    rgba(0, 212, 170, 0.03) 35px,
+    rgba(0, 212, 170, 0.03) 36px
+  );
+}
+
+/* Code block styling */
+.cobol-code {
+  background: #0d1520;
+  border: 1px solid rgba(0, 212, 170, 0.15);
+  border-radius: 8px;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+.cobol-code .line-number {
+  color: #4a5568;
+  user-select: none;
+  text-align: right;
+  padding-right: 1rem;
+  min-width: 3rem;
+  display: inline-block;
+}
+
+/* Pulsing cursor */
+.cursor-blink {
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Result card hover */
+.result-card {
+  transition: all 0.2s ease;
+  border: 1px solid rgba(0, 212, 170, 0.1);
+}
+
+.result-card:hover {
+  border-color: rgba(0, 212, 170, 0.3);
+  box-shadow: 0 0 20px rgba(0, 212, 170, 0.05);
+  transform: translateY(-1px);
+}
+
+/* Streaming text animation */
+.streaming-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cobol-accent);
+  animation: streamPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes streamPulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+/* Gradient border effect */
+.gradient-border {
+  position: relative;
+}
+
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(0, 212, 170, 0.3), transparent, rgba(0, 212, 170, 0.1));
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  pointer-events: none;
+}
+
+/* Hero stat counter */
+.stat-glow {
+  background: linear-gradient(135deg, rgba(0, 212, 170, 0.1), transparent);
+  border: 1px solid rgba(0, 212, 170, 0.2);
+}

@@ -28,6 +28,11 @@ export default function StatsBar() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     async function fetchStats() {
@@ -95,7 +100,7 @@ export default function StatsBar() {
               <div className="flex items-center gap-1.5">
                 <span className="text-[#4a5568]">Vectors:</span>
                 <span className="text-[#00d4aa] font-mono font-medium">
-                  {stats.vectors.total.toLocaleString()}
+                  {stats.vectors.total.toString()}
                 </span>
               </div>
               <div className="hidden sm:flex items-center gap-1.5">
@@ -134,7 +139,7 @@ export default function StatsBar() {
                   Total Vectors
                 </div>
                 <div className="text-xl font-bold text-[#00d4aa] font-mono">
-                  {stats.vectors.total.toLocaleString()}
+                  {stats.vectors.total.toString()}
                 </div>
                 <div className="text-[10px] text-[#4a5568] mt-0.5">
                   chunks indexed in Pinecone
@@ -228,7 +233,7 @@ export default function StatsBar() {
                           />
                         </div>
                         <span className="text-[#00d4aa] font-mono w-16 text-right">
-                          {data.recordCount.toLocaleString()}
+                          {data.recordCount.toString()}
                         </span>
                       </div>
                     </div>

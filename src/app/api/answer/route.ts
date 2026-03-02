@@ -7,6 +7,7 @@
 
 import { NextRequest } from "next/server";
 import { searchCodebase, generateStreamingAnswer } from "@/lib/rag-pipeline";
+import { logQuery, logError } from "@/lib/query-logger";
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -22,9 +23,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 1: Retrieve relevant chunks
+    const searchStart = Date.now();
     const results = await searchCodebase(query, topK);
+    const searchLatencyMs = Date.now() - searchStart;
 
     if (results.length === 0) {
+      logQuery({
+        type: "answer",
+        query,
+        topK,
+        resultsCount: 0,
+        topScore: 0,
+        searchLatencyMs,
+        totalLatencyMs: Date.now() - startTime,
+        hasAnswer: false,
+      });
+
       return new Response(
         JSON.stringify({
           error: "No relevant code found. Try rephrasing your question.",
@@ -39,17 +53,29 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 2: Generate streaming answer
+    const llmStart = Date.now();
     const stream = await generateStreamingAnswer(query, results);
 
-    const latencyMs = Date.now() - startTime;
-    console.log(
-      JSON.stringify({
-        type: "answer",
-        query,
-        sourcesCount: results.length,
-        searchLatencyMs: latencyMs,
-      })
-    );
+    const uniqueFiles = [...new Set(results.map((r) => r.filePath))];
+    const divisions = [...new Set(results.map((r) => r.division).filter(Boolean))];
+    const chunkTypes = [...new Set(results.map((r) => r.chunkType).filter(Boolean))];
+    const avgScore = results.reduce((s, r) => s + r.score, 0) / results.length;
+
+    logQuery({
+      type: "answer",
+      query,
+      topK,
+      resultsCount: results.length,
+      topScore: results[0]?.score || 0,
+      avgScore: +avgScore.toFixed(4),
+      uniqueFiles: uniqueFiles.length,
+      divisionsHit: divisions,
+      chunkTypes,
+      searchLatencyMs,
+      llmLatencyMs: Date.now() - llmStart,
+      totalLatencyMs: Date.now() - startTime,
+      hasAnswer: true,
+    });
 
     // Return SSE stream with sources in header
     return new Response(stream, {
@@ -58,11 +84,12 @@ export async function POST(request: NextRequest) {
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
         "X-Sources": Buffer.from(JSON.stringify(results)).toString("base64"),
-        "X-Latency-Ms": String(latencyMs),
+        "X-Latency-Ms": String(Date.now() - startTime),
       },
     });
   } catch (error: unknown) {
-    console.error("Answer error:", error);
+    const latencyMs = Date.now() - startTime;
+    logError("answer", "unknown", error, latencyMs);
     const message = error instanceof Error ? error.message : "Answer generation failed";
     return new Response(JSON.stringify({ error: message }), {
       status: 500,

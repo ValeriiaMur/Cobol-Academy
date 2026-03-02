@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { searchCodebase } from "@/lib/rag-pipeline";
+import { logQuery, logError } from "@/lib/query-logger";
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -24,17 +25,26 @@ export async function POST(request: NextRequest) {
     const results = await searchCodebase(query, topK);
     const latencyMs = Date.now() - startTime;
 
-    // Structured logging
-    console.log(
-      JSON.stringify({
-        type: "search",
-        query,
-        topK,
-        resultsCount: results.length,
-        latencyMs,
-        topScore: results[0]?.score || 0,
-      })
-    );
+    // Structured logging with full metrics
+    const uniqueFiles = [...new Set(results.map((r) => r.filePath))];
+    const divisions = [...new Set(results.map((r) => r.division).filter(Boolean))];
+    const chunkTypes = [...new Set(results.map((r) => r.chunkType).filter(Boolean))];
+    const avgScore = results.length
+      ? results.reduce((s, r) => s + r.score, 0) / results.length
+      : 0;
+
+    logQuery({
+      type: "search",
+      query,
+      topK,
+      resultsCount: results.length,
+      topScore: results[0]?.score || 0,
+      avgScore: +avgScore.toFixed(4),
+      uniqueFiles: uniqueFiles.length,
+      divisionsHit: divisions,
+      chunkTypes,
+      totalLatencyMs: latencyMs,
+    });
 
     return NextResponse.json({
       results,
@@ -42,7 +52,8 @@ export async function POST(request: NextRequest) {
       latencyMs,
     });
   } catch (error: unknown) {
-    console.error("Search error:", error);
+    const latencyMs = Date.now() - startTime;
+    logError("search", "unknown", error, latencyMs);
     const message = error instanceof Error ? error.message : "Search failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -69,7 +69,7 @@ export default function AnalyticsPanel({
   queryHistory,
   latencyMs,
 }: AnalyticsPanelProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
 
   // 1. Chunk Type Distribution (pie)
   const chunkTypeData = useMemo(() => {

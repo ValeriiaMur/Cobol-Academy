@@ -4,6 +4,12 @@
  * Splits COBOL source files using paragraph-level boundaries,
  * which are the natural semantic units in COBOL code.
  * Falls back to fixed-size chunking for non-procedural divisions.
+ *
+ * Enhancements:
+ * - Comment extraction: preserves inline comments as context
+ * - Encoding normalization: handles non-ASCII and legacy encodings
+ * - Copybook awareness: detects COPY statements for dependency graph
+ * - Improved paragraph detection with continuation line handling
  */
 
 export interface CobolChunk {
@@ -16,7 +22,10 @@ export interface CobolChunk {
     section: string;
     paragraphName: string;
     chunkType: "paragraph" | "division" | "fixed";
-    dependencies: string[]; // PERFORM targets, COPY statements
+    dependencies: string[]; // PERFORM targets, COPY statements, CALL targets
+    commentSummary: string; // Extracted comments for this chunk
+    linesOfCode: number;    // Non-blank, non-comment lines
+    complexity: number;     // Simple heuristic: conditionals + performs
   };
 }
 
@@ -24,14 +33,60 @@ export interface CobolChunk {
 const DIVISION_PATTERN = /^[\s]*(\w[\w-]*)\s+DIVISION\b/i;
 const SECTION_PATTERN = /^[\s]*(\w[\w-]*)\s+SECTION\b/i;
 const PARAGRAPH_PATTERN = /^[\s]{0,6}(\w[\w-]*)\.\s*$/;
-const PERFORM_PATTERN = /\bPERFORM\s+([\w-]+)/gi;
-const COPY_PATTERN = /\bCOPY\s+([\w-]+)/gi;
-const CALL_PATTERN = /\bCALL\s+['"]?([\w-]+)/gi;
 
 // Fixed-size chunking params for non-procedure code
 const FIXED_CHUNK_SIZE = 40; // lines
 const FIXED_CHUNK_OVERLAP = 5; // lines
 
+/**
+ * Normalize encoding issues common in legacy COBOL files
+ */
+function normalizeEncoding(source: string): string {
+  return source
+    // Replace common non-ASCII quotes/dashes
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\u2013/g, "-")
+    .replace(/\u2014/g, "--")
+    // Remove BOM
+    .replace(/^\uFEFF/, "")
+    // Normalize line endings
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    // Remove trailing whitespace per line
+    .replace(/[ \t]+$/gm, "")
+    // Replace tabs with spaces (COBOL uses fixed columns)
+    .replace(/\t/g, "    ");
+}
+
+/**
+ * Check if a line is a COBOL comment (column 7 = * or /)
+ */
+function isCommentLine(line: string): boolean {
+  if (line.length <= 6) return false;
+  const col7 = line[6];
+  return col7 === "*" || col7 === "/";
+}
+
+/**
+ * Check if a line is a continuation line (column 7 = -)
+ */
+function isContinuationLine(line: string): boolean {
+  if (line.length <= 6) return false;
+  return line[6] === "-";
+}
+
+/**
+ * Extract comment text from a comment line (strip the * prefix and leading whitespace)
+ */
+function extractCommentText(line: string): string {
+  if (line.length <= 7) return "";
+  return line.substring(7).trim();
+}
+
+/**
+ * Extract all dependencies (PERFORM, COPY, CALL) from code
+ */
 function extractDependencies(code: string): string[] {
   const deps: string[] = [];
   let match;
@@ -54,6 +109,64 @@ function extractDependencies(code: string): string[] {
   return [...new Set(deps)];
 }
 
+/**
+ * Calculate a simple complexity score for a code chunk
+ */
+function calculateComplexity(code: string): number {
+  const upperCode = code.toUpperCase();
+  let complexity = 0;
+
+  // Count conditionals
+  complexity += (upperCode.match(/\bIF\b/g) || []).length;
+  complexity += (upperCode.match(/\bEVALUATE\b/g) || []).length;
+  complexity += (upperCode.match(/\bWHEN\b/g) || []).length;
+
+  // Count PERFORM statements (control flow)
+  complexity += (upperCode.match(/\bPERFORM\b/g) || []).length;
+
+  // Count error handling
+  complexity += (upperCode.match(/\bON\s+ERROR\b/g) || []).length;
+  complexity += (upperCode.match(/\bINVALID\s+KEY\b/g) || []).length;
+  complexity += (upperCode.match(/\bAT\s+END\b/g) || []).length;
+
+  // Count I/O operations
+  complexity += (upperCode.match(/\bREAD\b/g) || []).length;
+  complexity += (upperCode.match(/\bWRITE\b/g) || []).length;
+
+  return complexity;
+}
+
+/**
+ * Count lines of code (non-blank, non-comment)
+ */
+function countLOC(lines: string[]): number {
+  return lines.filter((line) => {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) return false;
+    if (isCommentLine(line)) return false;
+    return true;
+  }).length;
+}
+
+/**
+ * Extract comments from a set of lines, returning a summary string
+ */
+function extractComments(lines: string[]): string {
+  const comments: string[] = [];
+  for (const line of lines) {
+    if (isCommentLine(line)) {
+      const text = extractCommentText(line);
+      if (text && !text.match(/^[*=-]+$/)) {
+        // Skip decorative comment lines (*****, =====, etc.)
+        comments.push(text);
+      }
+    }
+  }
+  // Limit to first 500 chars to keep metadata manageable
+  const summary = comments.join(" ").substring(0, 500);
+  return summary;
+}
+
 function fixedSizeChunk(
   lines: string[],
   startLine: number,
@@ -68,6 +181,8 @@ function fixedSizeChunk(
     if (chunkLines.length === 0) break;
 
     const content = chunkLines.join("\n");
+    const deps = extractDependencies(content);
+
     chunks.push({
       content,
       metadata: {
@@ -78,7 +193,10 @@ function fixedSizeChunk(
         section,
         paragraphName: "",
         chunkType: "fixed",
-        dependencies: extractDependencies(content),
+        dependencies: deps,
+        commentSummary: extractComments(chunkLines),
+        linesOfCode: countLOC(chunkLines),
+        complexity: calculateComplexity(content),
       },
     });
   }
@@ -87,7 +205,9 @@ function fixedSizeChunk(
 }
 
 export function chunkCobolFile(source: string, filePath: string): CobolChunk[] {
-  const lines = source.split("\n");
+  // Normalize encoding before processing
+  const normalizedSource = normalizeEncoding(source);
+  const lines = normalizedSource.split("\n");
   const chunks: CobolChunk[] = [];
 
   let currentDivision = "UNKNOWN";
@@ -117,6 +237,9 @@ export function chunkCobolFile(source: string, filePath: string): CobolChunk[] {
           paragraphName: currentParagraph,
           chunkType: "paragraph",
           dependencies: extractDependencies(content),
+          commentSummary: extractComments(paragraphLines),
+          linesOfCode: countLOC(paragraphLines),
+          complexity: calculateComplexity(content),
         },
       });
       paragraphLines = [];
@@ -141,9 +264,31 @@ export function chunkCobolFile(source: string, filePath: string): CobolChunk[] {
     const line = lines[i];
     const lineNum = i + 1;
 
-    // Skip comment lines (column 7 = *)
-    const col7 = line.length > 6 ? line[6] : " ";
-    if (col7 === "*" || col7 === "/") continue;
+    // Keep comment lines in the chunk content for context,
+    // but skip them for structural parsing
+    if (isCommentLine(line)) {
+      if (inProcedureDivision && currentParagraph) {
+        paragraphLines.push(line);
+      } else {
+        nonProcLines.push(line);
+        if (nonProcLines.length === 1) {
+          nonProcStart = lineNum;
+          nonProcDivision = currentDivision;
+          nonProcSection = currentSection;
+        }
+      }
+      continue;
+    }
+
+    // Skip continuation lines for structural parsing but include in content
+    if (isContinuationLine(line)) {
+      if (inProcedureDivision && currentParagraph) {
+        paragraphLines.push(line);
+      } else {
+        nonProcLines.push(line);
+      }
+      continue;
+    }
 
     // Check for division
     const divMatch = line.match(DIVISION_PATTERN);
@@ -219,7 +364,7 @@ export function chunkCobolFile(source: string, filePath: string): CobolChunk[] {
 
 /**
  * Formats a chunk into a string suitable for embedding.
- * Includes metadata prefix for better retrieval.
+ * Includes metadata prefix + extracted comments for better retrieval.
  */
 export function formatChunkForEmbedding(chunk: CobolChunk): string {
   const metaPrefix = [
@@ -230,6 +375,7 @@ export function formatChunkForEmbedding(chunk: CobolChunk): string {
     chunk.metadata.paragraphName && `Paragraph: ${chunk.metadata.paragraphName}`,
     chunk.metadata.dependencies.length > 0 &&
       `Dependencies: ${chunk.metadata.dependencies.join(", ")}`,
+    chunk.metadata.commentSummary && `Comments: ${chunk.metadata.commentSummary}`,
   ]
     .filter(Boolean)
     .join(" | ");

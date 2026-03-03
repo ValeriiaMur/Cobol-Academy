@@ -4,6 +4,11 @@
 
 COBOL Academy is an AI-powered learning platform that helps developers understand COBOL through guided exploration of the GnuCOBOL compiler source code. Built with RAG (Retrieval-Augmented Generation), it lets you ask questions in plain English and get answers grounded in real code — with file paths, line numbers, and modern language equivalents.
 
+<img width="1498" height="850" alt="Screenshot 2026-03-03 at 8 12 07 AM" src="https://github.com/user-attachments/assets/9a59ff31-4068-4242-b6be-1078fcde9a28" />
+
+<img width="1322" height="831" alt="Screenshot 2026-03-03 at 8 12 35 AM" src="https://github.com/user-attachments/assets/c230866e-f1f4-4c06-b0d6-98ba51d0ea96" />
+
+
 > COBOL powers 95% of ATM transactions, 80% of in-person transactions, and $3 trillion in daily commerce. The engineers who built these systems are retiring. The code isn't.
 
 ---

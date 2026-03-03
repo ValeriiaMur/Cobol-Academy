@@ -8,20 +8,35 @@
 import { NextRequest } from "next/server";
 import { searchCodebase, generateStreamingAnswer } from "@/lib/rag-pipeline";
 import { fusionSearch } from "@/lib/rag-fusion";
+import { rerank } from "@/lib/reranker";
 import { logQuery, logError } from "@/lib/query-logger";
+import { validateSearchInput } from "@/lib/validation";
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
-    const { query, topK = 5, fusion = false } = await request.json();
-
-    if (!query || typeof query !== "string") {
-      return new Response(JSON.stringify({ error: "Query string is required" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+    // Parse body safely
+    let body: Record<string, unknown>;
+    try {
+      body = await request.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON in request body" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
     }
+
+    // Validate and sanitize input
+    const input = validateSearchInput(body);
+    if (!input.valid) {
+      return new Response(
+        JSON.stringify({ error: input.errors[0].message, errors: input.errors }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const { query, topK, fusion } = input.data;
 
     // Step 1: Retrieve relevant chunks (standard or fusion)
     const searchStart = Date.now();
@@ -32,6 +47,10 @@ export async function POST(request: NextRequest) {
     } else {
       results = await searchCodebase(query, topK);
     }
+    // Re-rank results for improved precision
+    const reranked = await rerank(query, results, topK);
+    results = reranked;
+
     const searchLatencyMs = Date.now() - searchStart;
 
     if (results.length === 0) {
@@ -97,11 +116,11 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     const latencyMs = Date.now() - startTime;
     logError("answer", "unknown", error, latencyMs);
-    const message = error instanceof Error ? error.message : "Answer generation failed";
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    console.error("Answer API error:", error);
+    return new Response(
+      JSON.stringify({ error: "An internal error occurred. Please try again." }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
 }
 

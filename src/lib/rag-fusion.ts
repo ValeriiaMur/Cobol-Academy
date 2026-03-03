@@ -6,31 +6,30 @@
 
 import OpenAI from "openai";
 import { searchCodebase, SearchResult } from "./rag-pipeline";
+import { getOpenAIKey, models, fusion as fusionConfig } from "./config";
+import { sanitizeForPrompt } from "./validation";
 
 let openaiClient: OpenAI | null = null;
 
 function getOpenAI(): OpenAI {
   if (!openaiClient) {
-    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    openaiClient = new OpenAI({ apiKey: getOpenAIKey() });
   }
   return openaiClient;
 }
-
-const LLM_MODEL = process.env.LLM_MODEL || "gpt-4o-mini";
-const FUSION_VARIANT_COUNT = 3;
-const RRF_K = 60; // Standard RRF constant
 
 /**
  * Generate query variants using the LLM.
  */
 async function generateQueryVariants(
   query: string,
-  count: number = FUSION_VARIANT_COUNT
+  count: number = fusionConfig.variantCount
 ): Promise<string[]> {
   const openai = getOpenAI();
+  const sanitizedQuery = sanitizeForPrompt(query);
 
   const response = await openai.chat.completions.create({
-    model: LLM_MODEL,
+    model: models.llm,
     messages: [
       {
         role: "system",
@@ -40,11 +39,11 @@ Return ONLY the queries, one per line, without numbering or extra text.`,
       },
       {
         role: "user",
-        content: query,
+        content: sanitizedQuery,
       },
     ],
-    temperature: 0.7,
-    max_tokens: 300,
+    temperature: fusionConfig.temperature,
+    max_tokens: fusionConfig.maxTokens,
   });
 
   const text = response.choices[0]?.message?.content || "";
@@ -70,7 +69,7 @@ function reciprocalRankFusion(
   for (const results of resultSets) {
     for (let rank = 0; rank < results.length; rank++) {
       const result = results[rank];
-      const rrfScore = 1 / (RRF_K + rank + 1);
+      const rrfScore = 1 / (fusionConfig.rrfK + rank + 1);
       const existing = scoreMap.get(result.id);
       if (existing) {
         existing.score += rrfScore;
@@ -102,7 +101,7 @@ export async function fusionSearch(
   const queryVariants = await generateQueryVariants(query);
 
   // Search all variants in parallel, fetch more per query for better fusion
-  const perQueryTopK = Math.max(topK, 10);
+  const perQueryTopK = Math.max(topK, fusionConfig.minPerQueryTopK);
   const resultSets = await Promise.all(
     queryVariants.map((variant) => searchCodebase(variant, perQueryTopK))
   );

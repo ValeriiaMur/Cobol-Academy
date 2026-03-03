@@ -7,17 +7,17 @@
 import OpenAI from "openai";
 import { generateQueryEmbedding } from "./embeddings";
 import { queryVectors, VectorMetadata } from "./pinecone";
+import { getOpenAIKey, models, rag as ragConfig } from "./config";
+import { sanitizeForPrompt } from "./validation";
 
 let openaiClient: OpenAI | null = null;
 
 function getOpenAI(): OpenAI {
   if (!openaiClient) {
-    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    openaiClient = new OpenAI({ apiKey: getOpenAIKey() });
   }
   return openaiClient;
 }
-
-const LLM_MODEL = process.env.LLM_MODEL || "gpt-4o-mini";
 
 export interface SearchResult {
   id: string;
@@ -45,7 +45,7 @@ export interface AnswerResponse {
  */
 export async function searchCodebase(
   query: string,
-  topK: number = 5
+  topK: number = ragConfig.defaultTopK
 ): Promise<SearchResult[]> {
   const queryEmbedding = await generateQueryEmbedding(query);
   const matches = await queryVectors(queryEmbedding, topK);
@@ -101,6 +101,7 @@ Guidelines:
 - If the retrieved code doesn't fully answer the question, say so honestly
 - Format code references with backticks and be specific about locations
 - Keep explanations clear and educational — you're teaching, not just answering
+- Only use information from the retrieved context below. Do not fabricate code or references.
 
 Remember: You are powered by real COBOL source code from the GnuCOBOL compiler. Your answers should reference actual code, not generic COBOL knowledge.`;
 
@@ -114,16 +115,17 @@ export async function generateStreamingAnswer(
 ): Promise<ReadableStream> {
   const openai = getOpenAI();
   const context = assembleContext(results);
+  const sanitizedQuery = sanitizeForPrompt(query);
 
   const stream = await openai.chat.completions.create({
-    model: LLM_MODEL,
+    model: models.llm,
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       {
         role: "user",
         content: `Based on the following COBOL source code from the GnuCOBOL project, answer this question:
 
-Question: ${query}
+Question: ${sanitizedQuery}
 
 Retrieved Code Context:
 ${context}
@@ -132,8 +134,8 @@ Provide a clear, educational answer that references specific files and line numb
       },
     ],
     stream: true,
-    temperature: 0.3,
-    max_tokens: 2000,
+    temperature: ragConfig.llmTemperature,
+    max_tokens: ragConfig.llmMaxTokens,
   });
 
   const encoder = new TextEncoder();
@@ -167,16 +169,17 @@ export async function generateAnswer(
 ): Promise<string> {
   const openai = getOpenAI();
   const context = assembleContext(results);
+  const sanitizedQuery = sanitizeForPrompt(query);
 
   const response = await openai.chat.completions.create({
-    model: LLM_MODEL,
+    model: models.llm,
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       {
         role: "user",
         content: `Based on the following COBOL source code from the GnuCOBOL project, answer this question:
 
-Question: ${query}
+Question: ${sanitizedQuery}
 
 Retrieved Code Context:
 ${context}
@@ -184,8 +187,8 @@ ${context}
 Provide a clear, educational answer that references specific files and line numbers.`,
       },
     ],
-    temperature: 0.3,
-    max_tokens: 2000,
+    temperature: ragConfig.llmTemperature,
+    max_tokens: ragConfig.llmMaxTokens,
   });
 
   return response.choices[0]?.message?.content || "Unable to generate answer.";

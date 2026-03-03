@@ -47,7 +47,8 @@ Next.js Frontend ──> Code display + AI explanation + relevance scores
 | Backend | Next.js API Routes | App Router |
 | Frontend | Next.js + React + Tailwind CSS | v14 |
 | Deployment | Vercel | Free tier (Hobby) |
-| Evaluation | Manual test suite + RAGAS | Dual approach |
+| Evaluation | RAGAS-inspired automated suite | 5 metrics, 10 test cases |
+| Re-Ranking | Cohere rerank-v3.5 + LLM fallback | Dual-strategy for precision |
 
 ### Chunking Strategy
 
@@ -66,7 +67,7 @@ This approach produces semantically meaningful chunks aligned with code structur
 | Query Processing | Natural language input | Extract intent from user question |
 | Embedding | OpenAI text-embedding-3-small | Same model as ingestion (critical!) |
 | Similarity Search | Pinecone top-5 cosine | With metadata filtering by file type |
-| Re-ranking | None (v1) | Can add Cohere re-ranker in v2 |
+| Re-ranking | Cohere rerank-v3.5 + LLM fallback | Dual-strategy re-ranker (see below) |
 | Context Assembly | Concatenate chunks + metadata | Include file path and line numbers |
 | Answer Generation | GPT-4o-mini with streaming | Custom COBOL teaching prompt |
 
@@ -211,9 +212,15 @@ cobol-academy/
 │   │   └── Footer.tsx           # Footer with project attribution
 │   └── lib/
 │       ├── cobol-chunker.ts     # COBOL-aware syntax splitter
+│       ├── config.ts            # Centralized configuration
 │       ├── embeddings.ts        # OpenAI embedding generation
+│       ├── evaluator.ts         # RAGAS-style evaluation metrics
 │       ├── pinecone.ts          # Pinecone client (upsert + query)
-│       └── rag-pipeline.ts      # Search + context assembly + LLM
+│       ├── query-logger.ts      # Session logging with circular buffer
+│       ├── rag-fusion.ts        # Multi-query RAG with RRF merging
+│       ├── rag-pipeline.ts      # Search + context assembly + LLM
+│       ├── reranker.ts          # Cohere + LLM re-ranking
+│       └── validation.ts        # Input validation + sanitization
 ├── .env.local.example           # Environment template
 ├── next.config.mjs              # Next.js configuration
 ├── tailwind.config.ts           # Tailwind with custom COBOL theme
@@ -221,15 +228,75 @@ cobol-academy/
 └── package.json                 # Dependencies and scripts
 ```
 
+## Re-Ranking Pipeline
+
+Results go through a **dual-strategy re-ranker** after initial retrieval to improve precision:
+
+| Strategy | When Used | How It Works |
+|----------|-----------|-------------|
+| Cohere rerank-v3.5 | `COHERE_API_KEY` set | Sends query + documents to Cohere's semantic re-ranking API |
+| LLM Re-Ranker | Fallback (no Cohere key) | GPT-4o-mini scores each chunk's relevance 0.0–1.0 |
+
+The re-ranker sits between retrieval and answer generation:
+```
+Pinecone Top-K → Re-Ranker (score + reorder) → Top-N to LLM
+```
+
+Each result gets a `rerankerScore`, `originalScore`, and `relevanceLabel` (highly_relevant / relevant / partially_relevant / not_relevant).
+
+To enable Cohere re-ranking, add to `.env.local`:
+```
+COHERE_API_KEY=your-cohere-key
+```
+
+---
+
+## RAGAS-Style Evaluation Framework
+
+Automated evaluation suite with 5 metrics inspired by [RAGAS](https://docs.ragas.io/):
+
+| Metric | Weight | What It Measures |
+|--------|--------|-----------------|
+| Context Precision | 25% | Are the retrieved chunks relevant? (keyword + LLM scored) |
+| Context Recall | 25% | Does the context cover expected topics? |
+| Faithfulness | 25% | Is the answer grounded in context (no hallucination)? |
+| Answer Relevancy | 15% | Does the answer address the query? |
+| Latency | 10% | Is end-to-end response within 3s target? |
+
+### LLM Auditor (Adversarial Judge)
+
+On top of the standard metrics, every test case runs through an **adversarial LLM auditor** — a critically-prompted judge that looks for problems rather than confirming quality. This surfaces "unknown unknowns":
+
+| Check | What It Catches |
+|-------|----------------|
+| Hallucination | File paths, line numbers, or function names not in retrieved context |
+| Accuracy | Wrong COBOL explanations, bad modern-language analogies |
+| Completeness | Important context retrieved but omitted from the answer |
+| Misleading | Overly confident claims, snippets presented as full codebase |
+| Coherence | Self-contradictions, broken logic |
+| Safety | System prompt leakage, unsafe recommendations |
+
+Findings are classified as **critical** (🔴), **warning** (🟡), or **info** and surfaced in eval output.
+
+### Running the Evaluation
+
+```bash
+npm run evaluate
+```
+
+The suite runs 10 test cases against the live Pinecone index and produces per-query RAGAS scores + auditor findings, aggregate metrics, performance target pass/fail checks, and saves JSON results to `eval-results.json`.
+
+---
+
 ## Performance Targets
 
 | Metric | Target | Actual |
 |--------|--------|--------|
 | Query latency | <3 seconds end-to-end | ~1-2s search + streaming |
-| Retrieval precision | >70% relevant in top-5 | Validated with test queries |
+| Retrieval precision | >70% relevant in top-5 | Measured by RAGAS evaluation suite |
 | Codebase coverage | 100% of files indexed | All .cob/.cbl/.cpy files |
 | Ingestion throughput | 10K+ LOC in <5 minutes | ~30s for full ingestion |
-| Answer accuracy | Correct file/line references | LLM cites exact paths + lines |
+| Answer accuracy | Correct file/line references | Faithfulness scored by RAGAS eval |
 
 ## Testing Scenarios
 

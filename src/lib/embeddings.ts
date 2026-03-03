@@ -6,20 +6,16 @@
  */
 
 import OpenAI from "openai";
+import { getOpenAIKey, models, embedding as embeddingConfig } from "./config";
 
 let openaiClient: OpenAI | null = null;
 
 function getOpenAI(): OpenAI {
   if (!openaiClient) {
-    if (!process.env.OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY environment variable is required");
-    }
-    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    openaiClient = new OpenAI({ apiKey: getOpenAIKey() });
   }
   return openaiClient;
 }
-
-const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "text-embedding-3-small";
 
 /**
  * Generate embeddings for a batch of texts.
@@ -28,14 +24,13 @@ const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "text-embedding-3-small";
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
   const openai = getOpenAI();
 
-  // OpenAI batch limit is 2048 inputs
-  const batchSize = 100;
+  const batchSize = embeddingConfig.batchSize;
   const allEmbeddings: number[][] = [];
 
   for (let i = 0; i < texts.length; i += batchSize) {
     const batch = texts.slice(i, i + batchSize);
     const response = await openai.embeddings.create({
-      model: EMBEDDING_MODEL,
+      model: models.embedding,
       input: batch,
     });
 
@@ -58,7 +53,7 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
 export async function generateQueryEmbedding(query: string): Promise<number[]> {
   const openai = getOpenAI();
   const response = await openai.embeddings.create({
-    model: EMBEDDING_MODEL,
+    model: models.embedding,
     input: query,
   });
   return response.data[0].embedding;

@@ -6,16 +6,14 @@
  */
 
 import { Pinecone } from "@pinecone-database/pinecone";
+import { getPineconeKey, pinecone as pineconeConfig } from "./config";
 
 let pineconeClient: Pinecone | null = null;
 
 export function getPineconeClient(): Pinecone {
   if (!pineconeClient) {
-    if (!process.env.PINECONE_API_KEY) {
-      throw new Error("PINECONE_API_KEY environment variable is required");
-    }
     pineconeClient = new Pinecone({
-      apiKey: process.env.PINECONE_API_KEY,
+      apiKey: getPineconeKey(),
     });
   }
   return pineconeClient;
@@ -23,8 +21,7 @@ export function getPineconeClient(): Pinecone {
 
 export function getIndex() {
   const client = getPineconeClient();
-  const indexName = process.env.PINECONE_INDEX || "cobol-academy";
-  return client.index(indexName);
+  return client.index(pineconeConfig.indexName);
 }
 
 export interface VectorMetadata {

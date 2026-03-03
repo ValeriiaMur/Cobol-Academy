@@ -10,25 +10,27 @@
 
 import { NextResponse } from "next/server";
 import { getPineconeClient } from "@/lib/pinecone";
+import { pinecone as pineconeConfig, models, chunking } from "@/lib/config";
 
 export async function GET() {
   try {
     const client = getPineconeClient();
-    const indexName = process.env.PINECONE_INDEX || "cobol-academy";
-    const index = client.index(indexName);
+    const index = client.index(pineconeConfig.indexName);
 
     // Get index stats
     const stats = await index.describeIndexStats();
 
     // Get index description for dimension/metric info
     const indexList = await client.listIndexes();
-    const indexInfo = indexList?.indexes?.find((idx) => idx.name === indexName);
+    const indexInfo = indexList?.indexes?.find(
+      (idx) => idx.name === pineconeConfig.indexName
+    );
 
     return NextResponse.json({
       index: {
-        name: indexName,
-        dimension: indexInfo?.dimension || 1536,
-        metric: indexInfo?.metric || "cosine",
+        name: pineconeConfig.indexName,
+        dimension: indexInfo?.dimension || models.embeddingDimensions,
+        metric: indexInfo?.metric || pineconeConfig.metric,
         host: indexInfo?.host || "",
         status: indexInfo?.status?.ready ? "ready" : "initializing",
       },
@@ -38,15 +40,17 @@ export async function GET() {
         indexFullness: (stats as any).indexFullness || 0,
       },
       config: {
-        embeddingModel: process.env.EMBEDDING_MODEL || "text-embedding-3-small",
-        llmModel: process.env.LLM_MODEL || "gpt-4o-mini",
+        embeddingModel: models.embedding,
+        llmModel: models.llm,
         topK: 5,
-        chunkingStrategy: "COBOL paragraph-level + fixed fallback",
+        chunkingStrategy: chunking.strategy,
       },
     });
   } catch (error: unknown) {
     console.error("Stats error:", error);
-    const message = error instanceof Error ? error.message : "Failed to fetch stats";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch index stats. Please try again." },
+      { status: 500 }
+    );
   }
 }

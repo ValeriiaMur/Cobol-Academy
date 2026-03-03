@@ -3,45 +3,57 @@
  *
  * Semantic search across the COBOL codebase.
  * Supports standard search and RAG Fusion mode.
- *
- * Body params:
- *   query: string (required)
- *   topK: number (default 5)
- *   fusion: boolean (default false) — enables RAG Fusion multi-query search
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { searchCodebase } from "@/lib/rag-pipeline";
 import { fusionSearch } from "@/lib/rag-fusion";
+import { rerank } from "@/lib/reranker";
 import { logQuery, logError } from "@/lib/query-logger";
+import { validateSearchInput } from "@/lib/validation";
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
-    const { query, topK = 5, fusion = false } = await request.json();
-
-    if (!query || typeof query !== "string") {
+    // Parse body safely
+    let body: Record<string, unknown>;
+    try {
+      body = await request.json();
+    } catch {
       return NextResponse.json(
-        { error: "Query string is required" },
+        { error: "Invalid JSON in request body" },
         { status: 400 }
       );
     }
+
+    // Validate and sanitize input
+    const input = validateSearchInput(body);
+    if (!input.valid) {
+      return NextResponse.json(
+        { error: input.errors[0].message, errors: input.errors },
+        { status: 400 }
+      );
+    }
+
+    const { query, topK, fusion } = input.data;
 
     let results;
     let queryVariants: string[] | undefined;
     let perQueryResults: number[] | undefined;
 
     if (fusion) {
-      // RAG Fusion: multi-query + RRF
       const fusionResult = await fusionSearch(query, topK);
       results = fusionResult.results;
       queryVariants = fusionResult.queryVariants;
       perQueryResults = fusionResult.perQueryResults;
     } else {
-      // Standard single-query search
       results = await searchCodebase(query, topK);
     }
+
+    // Re-rank results for improved precision
+    const reranked = await rerank(query, results, topK);
+    results = reranked;
 
     const latencyMs = Date.now() - startTime;
 
@@ -77,7 +89,10 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     const latencyMs = Date.now() - startTime;
     logError("search", "unknown", error, latencyMs);
-    const message = error instanceof Error ? error.message : "Search failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Search API error:", error);
+    return NextResponse.json(
+      { error: "An internal error occurred. Please try again." },
+      { status: 500 }
+    );
   }
 }

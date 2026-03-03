@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { query, topK, fusion } = input.data;
+    const { query, topK, fusion, rerank: useRerank } = input.data;
 
     let results;
     let queryVariants: string[] | undefined;
@@ -51,9 +51,11 @@ export async function POST(request: NextRequest) {
       results = await searchCodebase(query, topK);
     }
 
-    // Re-rank results for improved precision
-    const reranked = await rerank(query, results, topK);
-    results = reranked;
+    // Re-rank only when explicitly requested (adds ~1-2s latency)
+    if (useRerank) {
+      const reranked = await rerank(query, results, topK);
+      results = reranked;
+    }
 
     const latencyMs = Date.now() - startTime;
 

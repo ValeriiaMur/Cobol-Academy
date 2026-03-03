@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { query, topK, fusion } = input.data;
+    const { query, topK, fusion, rerank: useRerank } = input.data;
 
     // Step 1: Retrieve relevant chunks (standard or fusion)
     const searchStart = Date.now();
@@ -47,9 +47,12 @@ export async function POST(request: NextRequest) {
     } else {
       results = await searchCodebase(query, topK);
     }
-    // Re-rank results for improved precision
-    const reranked = await rerank(query, results, topK);
-    results = reranked;
+
+    // Re-rank only when explicitly requested (adds ~1-2s latency)
+    if (useRerank) {
+      const reranked = await rerank(query, results, topK);
+      results = reranked;
+    }
 
     const searchLatencyMs = Date.now() - searchStart;
 

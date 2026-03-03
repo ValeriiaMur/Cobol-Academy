@@ -124,6 +124,22 @@ describe("validateSearchInput", () => {
     }
   });
 
+  it("defaults rerank to false", () => {
+    const result = validateSearchInput({ query: "test query" });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.rerank).toBe(false);
+    }
+  });
+
+  it("accepts rerank=true", () => {
+    const result = validateSearchInput({ query: "test query", rerank: true });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.rerank).toBe(true);
+    }
+  });
+
   it("sanitizes query content", () => {
     const result = validateSearchInput({ query: "  hello\0world  " });
     expect(result.valid).toBe(true);

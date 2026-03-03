@@ -16,6 +16,7 @@ export interface ValidatedSearchInput {
   query: string;
   topK: number;
   fusion: boolean;
+  rerank: boolean;
 }
 
 /**
@@ -106,11 +107,14 @@ export function validateSearchInput(
   // Validate fusion
   const fusion = validateBoolean(body.fusion, false);
 
+  // Validate rerank (opt-in, off by default for speed)
+  const rerank = validateBoolean(body.rerank, false);
+
   if (errors.length > 0) {
     return { valid: false, errors };
   }
 
-  return { valid: true, data: { query, topK, fusion } };
+  return { valid: true, data: { query, topK, fusion, rerank } };
 }
 
 /**
